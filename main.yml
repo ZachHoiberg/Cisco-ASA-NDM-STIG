@@ -1,0 +1,262 @@
+---
+- name: SAT-ASA NDM STIG Config
+  hosts: all
+  vars_files: secrets/secrets.yml
+  gather_facts: True
+  connection: network_cli
+  become: yes
+  tasks:
+    
+    - name: Create the lists from secrets
+      set_fact: 
+        loginBannerList: "{{loginBanner.split('\n')}}"
+        ntpServersList: "{{ntpServers.split('\n')}}"
+        tacacsHostsList: "{{tacacsHosts.split('\n')}}"
+        sshSubnetsList: "{{sshSubnets.split('\n')}}"
+    
+    - name: CASA-ND-000010 - The Cisco ASA must be configured to limit the number of concurrent management sessions to an organization-defined number.
+      cisco.asa.asa_config:
+        lines:
+        - quota management-session {{managementSessions}}
+
+    - name: Grabbing running config
+      ios_command:
+        commands: show running-config all | include logging flash
+      register: running_config
+
+    - name: CASA-ND-000090, CASA-ND-000100, CASA-ND-000110, CASA-ND-000120, CASA-ND-000210, CASA-ND-000240, CASA-ND-000260, CASA-ND-000270, CASA-ND-000280, CASA-ND-000290, CASA-ND-000300, CASA-ND-000320, CASA-ND-000910, CASA-ND-000920, CASA-ND-000930, CASA-ND-000970, CASA-ND-001200, CASA-ND-001210, CASA-ND-001220, CASA-ND-001230, CASA-ND-001240, CASA-ND-001250, CASA-ND-001260, CASA-ND-001410 - The Cisco ASA must be configured to automatically audit account creation, modification, disabling, removal, activity, login attempts,  the timestamp of these events, where these events occurred, the outcome, and other information. (1/2)
+      cisco.asa.asa_config:
+        lines:
+        - logging enable
+        - logging timestamp
+        - logging buffered informational
+        - logging trap notifications
+        - logging host outside {{logHost}}
+        defaults: Yes
+        
+    - name: CASA-ND-000090, CASA-ND-000100, CASA-ND-000110, CASA-ND-000120, CASA-ND-000210, CASA-ND-000240, CASA-ND-000260, CASA-ND-000270, CASA-ND-000280, CASA-ND-000290, CASA-ND-000300, CASA-ND-000320, CASA-ND-000910, CASA-ND-000920, CASA-ND-000930, CASA-ND-000970, CASA-ND-001200, CASA-ND-001210, CASA-ND-001220, CASA-ND-001230, CASA-ND-001240, CASA-ND-001250, CASA-ND-001260, CASA-ND-001410 - The Cisco ASA must be configured to automatically audit account creation, modification, disabling, removal, activity, login attempts,  the timestamp of these events, where these events occurred, the outcome, and other information. (2/2)
+      cisco.asa.asa_config:
+        lines:
+        - logging flash-minimum-free 3076
+        - logging flash-maximum-allocation 1024
+        config: "{{running_config.stdout[0]}}"
+        match: exact
+
+    - name: CASA-ND-000140 - The Cisco ASA must be configured to enforce approved authorizations for controlling the flow of management information within the Cisco ASA based on information flow control policies. (1/2)
+      cisco.asa.asa_config:
+        lines:
+         ssh {{item}}
+      loop: "{{sshSubnetsList}}"
+      when: 'sshSubnetsList[0] != sshSubnetsList[-1] and item != ""'
+
+    - name: CASA-ND-000140 - The Cisco ASA must be configured to enforce approved authorizations for controlling the flow of management information within the Cisco ASA based on information flow control policies. (2/2)
+      cisco.asa.asa_config:
+        lines:
+         ssh {{sshSubnetsList}}
+      when: 'sshSubnetsList[0] == sshSubnetsList[-1] and sshSubnetsList[0] != ""'
+
+    - name: Grabbing running config
+      ios_command:
+        commands: show running-config | include banner login
+      register: running_config
+
+    - name: CASA-ND-000160 - The Cisco ASA must be configured to display the Standard Mandatory DoD Notice and Consent Banner before granting access to the device.
+      cisco.asa.asa_config:
+        lines: "{{loginBannerList}}"
+        match: exact
+        replace: block
+        before: no banner login
+        config: "{{running_config.stdout[0]}}"
+
+    - name: Grabbing running config
+      ios_command:
+        commands: show running-config telnet | exclude timeout
+      register: running_config
+
+    - name: CASA-ND-000430 - The Cisco ASA must be configured to prohibit the use of all unnecessary and/or non-secure functions, ports, protocols, and/or services. (1/2)
+      cisco.asa.asa_config:
+        lines:
+        - no {{item}}
+      when: running_config.stdout[0] is search ("telnet") and running_config.stdout_lines[0][0] != running_config.stdout_lines[0][-1]
+      loop: "{{running_config.stdout_lines[0] if running_config.stdout_lines[0] is iterable and running_config.stdout_lines[0] is not string}}"
+
+    - name: CCASA-ND-000430 - The Cisco ASA must be configured to prohibit the use of all unnecessary and/or non-secure functions, ports, protocols, and/or services. (2/2)
+      cisco.asa.asa_config:
+        lines:
+        - no {{running_config.stdout[0]}}
+      when: running_config.stdout[0] is search ("telnet") and running_config.stdout_lines[0][0] == running_config.stdout_lines[0][-1]
+
+    - name: Grabbing running config
+      ios_command:
+        commands: show running-config
+      register: running_config
+
+    - name: CASA-ND-000450, CASA-ND-001310 - The Cisco ASA must be configured with only one local account to be used as the account of last resort in the event the authentication server is unavailable. (1/10)
+      cisco.asa.asa_config:
+        lines:
+        - username {{lastResortUsername}} privilege 15
+        - username {{lastResortUsername}} password {{lastResortPassword}}
+      when: 'not running_config.stdout[0] is search("username "+lastResortUsername+" password")'
+
+    - name: CASA-ND-000450, CASA-ND-001310 - The Cisco ASA must be configured with only one local account to be used as the account of last resort in the event the authentication server is unavailable. (2/10)
+      cisco.asa.asa_config:
+        lines:
+        - aaa-server TACACS_GROUP protocol tacacs+
+
+    - name: CASA-ND-000450, CASA-ND-001310 - The Cisco ASA must be configured with only one local account to be used as the account of last resort in the event the authentication server is unavailable. (3/10)
+      cisco.asa.asa_config:
+        lines:
+        - aaa-server TACACS_GROUP ({{tacacsInterface}}) host {{item}}
+      loop: "{{tacacsHostsList}}"
+      when: 'tacacsHostsList[0] != tacacsHostsList[-1] and item != ""'
+
+    - name: CASA-ND-000450, CASA-ND-001310 - The Cisco ASA must be configured with only one local account to be used as the account of last resort in the event the authentication server is unavailable. (4/10)
+      cisco.asa.asa_config:
+        lines:
+        - aaa-server TACACS_GROUP ({{tacacsInterface}}) host {{tacacsHostsList[0]}}
+      when: 'tacacsHostsList[0] == tacacsHostsList[-1] and tacacsHostsList[0] != ""'
+
+    - name: CASA-ND-000450, CASA-ND-001310 - The Cisco ASA must be configured with only one local account to be used as the account of last resort in the event the authentication server is unavailable. (5/10)
+      cisco.asa.asa_config:
+        lines:
+        - key {{tacacsKey}}
+        parents: aaa-server TACACS_GROUP host {{item}}
+      when: 'not running_config.stdout[0] is regex("aaa-server TACACS_GROUP \("+tacacsInterface+"\) host "+tacacsHostsList[0]+"\\n key") and tacacsHostsList[0] != tacacsHostsList[-1] and item != ""'
+      loop: "{{tacacsHostsList}}"
+
+    - name: CASA-ND-000450, CASA-ND-001310 - The Cisco ASA must be configured with only one local account to be used as the account of last resort in the event the authentication server is unavailable. (6/10)
+      cisco.asa.asa_config:
+        lines:
+        - key {{tacacsKey}}
+        parents: aaa-server TACACS_GROUP ({{tacacsInterface}}) host {{tacacsHostsList[0]}}
+      when: 'not running_config.stdout[0] is regex("aaa-server TACACS_GROUP \("+tacacsInterface+"\) host "+tacacsHostsList[0]+"\\n key") and tacacsHostsList[0] == tacacsHostsList[-1] and tacacsHostsList[0] != ""'
+
+    - name: CASA-ND-000450, CASA-ND-001310 - The Cisco ASA must be configured with only one local account to be used as the account of last resort in the event the authentication server is unavailable. (7/10)
+      cisco.asa.asa_config:
+        lines:
+        - aaa authentication ssh console TACACS_GROUP LOCAL
+        before: no aaa authentication ssh console LOCAL
+
+    - name: CASA-ND-000450, CASA-ND-001310 - The Cisco ASA must be configured with only one local account to be used as the account of last resort in the event the authentication server is unavailable. (8/10)
+      cisco.asa.asa_config:
+        lines:
+        - aaa authentication ssh console TACACS_GROUP LOCAL
+        before: no aaa authentication http console LOCAL
+
+    - name: CASA-ND-000450, CASA-ND-001310 - The Cisco ASA must be configured with only one local account to be used as the account of last resort in the event the authentication server is unavailable. (9/10)
+      cisco.asa.asa_config:
+        lines:
+        - aaa authentication serial console TACACS_GROUP LOCAL
+        before: no aaa authentication serial console LOCAL
+
+    - name: CASA-ND-000450, CASA-ND-001310 - The Cisco ASA must be configured with only one local account to be used as the account of last resort in the event the authentication server is unavailable. (10/10)
+      cisco.asa.asa_config:
+        lines:
+        - aaa authentication enable console TACACS_GROUP LOCAL
+        before: no aaa authentication enable console LOCAL
+
+    - name: CASA-ND-000470, CASA-ND-001140, CASA-ND-001150 - The Cisco ASA must be configured to implement replay-resistant authentication mechanisms for network access to privileged accounts.
+      cisco.asa.asa_config:
+        lines:
+        - ssh cipher encryption fips 
+        - ssh key-exchange group dh-group14-sha256
+
+    - name: CASA-ND-000490, CASA-ND-000520, CASA-ND-000530, CASA-ND-000550,  CASA-ND-000570, CASA-ND-000580 - The Cisco ASA must be configured to enforce a minimum 15-character password length with password complexity requirements.
+      cisco.asa.asa_config:
+        lines:
+        - password-policy minimum-length 15
+        - password-policy minimum-uppercase 1
+        - password-policy minimum-lowercase 1
+        - password-policy minimum-numeric 1
+        - password-policy minimum-special 1
+        - password-policy minimum-changes 8
+
+    - name: CASA-ND-000690 - The Cisco ASA must be configured to terminate all network connections associated with a device management session at the end of the session, or the session must be terminated after 10 minutes of inactivity except to fulfill documented and validated mission requirements.
+      cisco.asa.asa_config:
+        lines:
+        - ssh timeout 10
+        - console timeout 10
+        - http server idle-timeout 10
+
+    - name: Grabbing running config
+      ios_command:
+        commands: show running-config | include ntp server
+      register: running_config
+
+    - name: CASA-ND-000940 - The Cisco ASA must be configured to synchronize its clock with the primary and secondary time sources using redundant authoritative time sources.
+      cisco.asa.asa_config:
+        lines: "{{ntpServersList}}"
+        match: exact
+        replace: block
+        config: "{{running_config.stdout[0]}}"
+        
+    - name: CASA-ND-000980 - The Cisco ASA must be configured to record time stamps for audit records that can be mapped to Coordinated Universal Time (UTC) or Greenwich Mean Time (GMT).
+      cisco.asa.asa_config:
+        lines:
+        - clock timezone {{hostTimeZone}}
+
+    - name: Grabbing running config
+      ios_command:
+        commands: show running-config | include snmp-server
+      register: running_config
+
+    - name: CASA-ND-001050, CASA-ND-001070 - The Cisco ASA must be configured to authenticate Simple Network Management Protocol (SNMP) messages using a FIPS-validated Keyed-Hash Message Authentication Code (HMAC) and using a FIPS 140-2 approved algorithm.
+      cisco.asa.asa_config:
+        lines:
+        - snmp-server group {{snmpGroup}} v3 priv 
+        - snmp-server user {{snmpUser}} default v3 auth sha {{snmpPassword}} priv aes 256 {{snmpPassword}}
+      when: not running_config.stdout[0] is search("snmp-server user "+snmpUser+" "+snmpGroup+" v3")
+
+#TBD
+#    - name: CASA-ND-001080 - The Cisco ASA must be configured to authenticate Network Time Protocol sources using authentication that is cryptographically based.
+#      cisco.asa.asa_config:
+#        lines:
+#        - 
+
+    - name: CASA-ND-001180 - The Cisco ASA must be configured to protect against known types of Denial of Service (DoS) attacks by enabling the Threat Detection feature.
+      cisco.asa.asa_config:
+        lines:
+        - threat-detection basic-threat 
+
+    - name: CASA-ND-001370 - The Cisco ASA must be configured to obtain its public key certificates from an appropriate certificate policy through an approved service provider. (1/6)
+      cisco.asa.asa_config:
+        lines:
+        - domain-name {{domainName}}
+
+    - name: CASA-ND-001370 - The Cisco ASA must be configured to obtain its public key certificates from an appropriate certificate policy through an approved service provider. (2/6)
+      cisco.asa.asa_command:
+        commands:
+        - show crypto key mypubkey rsa
+      register: keyList
+
+    - name: CASA-ND-001370 - The Cisco ASA must be configured to obtain its public key certificates from an appropriate certificate policy through an approved service provider. (3/6)
+      cisco.asa.asa_command:
+        commands:
+        - show crypto ca certificates
+      register: certList
+
+    - name: CASA-ND-001370 - The Cisco ASA must be configured to obtain its public key certificates from an appropriate certificate policy through an approved service provider. 4/6)
+      cisco.asa.asa_config:
+        lines:
+        - crypto key generate rsa general-keys label {{trustpointName}} modulus 2048
+        defaults: Yes
+      when: 'not keyList is search(trustpointName)'
+
+    - name: CASA-ND-001370 - The Cisco ASA must be configured to obtain its public key certificates from an appropriate certificate policy through an approved service provider. (5/6)
+      cisco.asa.asa_config:
+        lines:
+        - enrollment retry count 100
+        - enrollment protocol scep url http://{{trustpointIP}}:80/certsrv/mscep/mscep.dll
+        - fqdn {{ansible_net_hostname}}.{{domainName}}
+        - keypair {{trustpointName}}
+        - crl configure
+        parents: crypto ca trustpoint {{trustpointName}}
+
+#    - name: CASA-ND-001370 - The Cisco ASA must be configured to obtain its public key certificates from an appropriate certificate policy through an approved service provider. (6/6)
+#      cisco.asa.asa_command:
+#        commands:
+#        - configure terminal
+#        - crypto ca authenticate {{trustpointName}}
+#        - yes
+#        - crypto ca import {{trustpointName}} certificate
+#      when: 'not certList is search({{trustpointName}})'
