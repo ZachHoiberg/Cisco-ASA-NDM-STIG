@@ -29,9 +29,9 @@
         lines:
         - logging enable
         - logging timestamp
-        - logging buffered informational
+        - logging buffered notifications
         - logging trap notifications
-        - logging host outside {{logHost}}
+        - logging host {{loggingInterface}} {{logHost}}
         defaults: Yes
         
     - name: CASA-ND-000090, CASA-ND-000100, CASA-ND-000110, CASA-ND-000120, CASA-ND-000210, CASA-ND-000240, CASA-ND-000260, CASA-ND-000270, CASA-ND-000280, CASA-ND-000290, CASA-ND-000300, CASA-ND-000320, CASA-ND-000910, CASA-ND-000920, CASA-ND-000930, CASA-ND-000970, CASA-ND-001200, CASA-ND-001210, CASA-ND-001220, CASA-ND-001230, CASA-ND-001240, CASA-ND-001250, CASA-ND-001260, CASA-ND-001410 - The Cisco ASA must be configured to automatically audit account creation, modification, disabling, removal, activity, login attempts,  the timestamp of these events, where these events occurred, the outcome, and other information. (2/2)
@@ -204,10 +204,9 @@
       cisco.asa.asa_config:
         lines:
         - snmp-server group {{snmpGroup}} v3 priv 
-        - snmp-server user {{snmpUser}} default v3 auth sha {{snmpPassword}} priv aes 256 {{snmpPassword}}
+        - snmp-server user {{snmpUser}} {{snmpGroup}} v3 auth sha {{snmpPassword}} priv aes 256 {{snmpPassword}}
       when: not running_config.stdout[0] is search("snmp-server user "+snmpUser+" "+snmpGroup+" v3")
 
-#TBD
 #    - name: CASA-ND-001080 - The Cisco ASA must be configured to authenticate Network Time Protocol sources using authentication that is cryptographically based.
 #      cisco.asa.asa_config:
 #        lines:
@@ -247,6 +246,7 @@
         lines:
         - enrollment retry count 100
         - enrollment protocol scep url http://{{trustpointIP}}:80/certsrv/mscep/mscep.dll
+        - enrollment interface secure
         - fqdn {{ansible_net_hostname}}.{{domainName}}
         - keypair {{trustpointName}}
         - crl configure
