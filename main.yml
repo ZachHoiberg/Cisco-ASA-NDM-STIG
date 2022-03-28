@@ -20,7 +20,7 @@
         - quota management-session {{managementSessions}}
 
     - name: Grabbing running config
-      ios_command:
+      cisco.asa.asa_command:
         commands: show running-config all | include logging flash
       register: running_config
 
@@ -56,7 +56,7 @@
       when: 'sshSubnetsList[0] == sshSubnetsList[-1] and sshSubnetsList[0] != ""'
 
     - name: Grabbing running config
-      ios_command:
+      cisco.asa.asa_command:
         commands: show running-config | include banner login
       register: running_config
 
@@ -69,7 +69,7 @@
         config: "{{running_config.stdout[0]}}"
 
     - name: Grabbing running config
-      ios_command:
+      cisco.asa.asa_command:
         commands: show running-config telnet | exclude timeout
       register: running_config
 
@@ -87,7 +87,7 @@
       when: running_config.stdout[0] is search ("telnet") and running_config.stdout_lines[0][0] == running_config.stdout_lines[0][-1]
 
     - name: Grabbing running config
-      ios_command:
+      cisco.asa.asa_command:
         commands: show running-config
       register: running_config
 
@@ -179,7 +179,7 @@
         - http server idle-timeout 10
 
     - name: Grabbing running config
-      ios_command:
+      cisco.asa.asa_command:
         commands: show running-config | include ntp server
       register: running_config
 
@@ -196,7 +196,7 @@
         - clock timezone {{hostTimeZone}}
 
     - name: Grabbing running config
-      ios_command:
+      cisco.asa.asa_command:
         commands: show running-config | include snmp-server
       register: running_config
 
